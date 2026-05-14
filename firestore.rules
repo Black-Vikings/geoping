@@ -6,7 +6,6 @@ service cloud.firestore {
       allow read, write: if request.auth != null
         && request.auth.uid == resource.data.ownerUid;
 
-      // Allow create (resource doesn't exist yet)
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.ownerUid;
     }
@@ -17,10 +16,19 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/configs/$(configId)).data.ownerUid
            == request.auth.uid;
 
-      // Abuelo can write if writeToken matches
+      // Pingo can write if writeToken matches AND session is not expired
       allow write: if request.auth != null
         && request.resource.data.writeToken
-           == get(/databases/$(database)/documents/configs/$(configId)).data.writeToken;
+           == get(/databases/$(database)/documents/configs/$(configId)).data.writeToken
+        && (
+             // Session start: expiresAt is included and is in the future
+             (request.resource.data.keys().hasAll(['expiresAt'])
+              && request.resource.data.expiresAt > request.time)
+             ||
+             // Location update: check that the existing session has not expired
+             (resource != null
+              && resource.data.expiresAt > request.time)
+           );
     }
   }
 }

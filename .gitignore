@@ -43,3 +43,23 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase config — download from Firebase Console and place manually
+google-services.json
+GoogleService-Info.plist
+
+# Firebase CLI
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc
+
+# Cloud Functions
+functions/node_modules/
+functions/lib/
+functions/.env
+functions/*.local
+
+# Freezed / json_serializable generated files (regenerate with: make codegen)
+*.freezed.dart
+*.g.dart
