@@ -1,6 +1,6 @@
 # GeoPing
 
-App Flutter para que una persona mayor ("el abuelo") comparta su ubicación en tiempo real con su familia con un solo toque.
+App Flutter para compartir ubicación en tiempo real con un solo toque.
 
 **Sin servidores propios — todo sobre Firebase. Sin polling — Firestore real-time streams.**
 
@@ -10,8 +10,8 @@ App Flutter para que una persona mayor ("el abuelo") comparta su ubicación en t
 
 | Rol | Descripción |
 |-----|-------------|
-| **Abuelo** | Pantalla con botón rojo enorme. Un toque comparte la ubicación. Diseñado para personas mayores: fuente mínimo 18sp, contraste alto, interfaz mínima. |
-| **Familiar** | Lista de abuelos configurados. Tarjeta verde cuando hay sesión activa. Mapa en tiempo real via OpenStreetMap (sin API key). Recibe push notification al inicio de sesión. |
+| **Pingo** | Ve un botón por cada familiar registrado. Lo toca y comparte su ubicación solo con esa persona. Diseñado para ser simple: fuente mínimo 18sp, contraste alto, interfaz mínima. |
+| **Familiar** | Lista de Pingos configurados. Tarjeta verde cuando hay sesión activa. Mapa en tiempo real via OpenStreetMap (sin API key). Recibe push notification al inicio de sesión. |
 
 ---
 
@@ -19,8 +19,9 @@ App Flutter para que una persona mayor ("el abuelo") comparta su ubicación en t
 
 - Flutter 3.x (stable)
 - Dart 3.x
-- Firebase CLI: `npm install -g firebase-tools`
 - Node.js 20+
+- pnpm: `npm install -g pnpm`
+- Firebase CLI: `npm install -g firebase-tools`
 - Cuenta Firebase con plan **Blaze** (necesario para Cloud Functions)
 
 ---
@@ -44,19 +45,21 @@ firebase use geopping-prod
 
 ### 3. Agregar archivos de configuración
 
-**Android:** Descarga `google-services.json` desde Consola Firebase → Configuración del proyecto → Android, y colócalo en:
+> Estos archivos están en `.gitignore` — descárgalos desde la consola Firebase y colócalos manualmente.
+
+**Android:** Consola Firebase → Configuración del proyecto → Android → `google-services.json`:
 ```
 android/app/google-services.json
 ```
 
-**iOS:** Descarga `GoogleService-Info.plist` desde Consola Firebase → Configuración del proyecto → iOS, y colócalo en:
+**iOS:** Consola Firebase → Configuración del proyecto → iOS → `GoogleService-Info.plist`:
 ```
 ios/Runner/GoogleService-Info.plist
 ```
 
 ### 4. Agregar plugin de Google Services a Android
 
-En `android/build.gradle` (nivel proyecto), en `dependencies`:
+En `android/build.gradle` (nivel proyecto), dentro de `dependencies`:
 ```groovy
 classpath 'com.google.gms:google-services:4.4.2'
 ```
@@ -84,7 +87,9 @@ make build-apk        # Build APK release
 make build-ios        # Build IPA release
 make codegen          # Regenerar código freezed/json_serializable
 make codegen-watch    # Regenerar código en modo watch
-make functions-deploy # Deploy Cloud Functions a producción
+make deploy           # Deploy completo: Functions + Firestore rules + indexes
+make functions-deploy # Deploy solo Cloud Functions
+make rules-deploy     # Deploy solo Firestore rules e indexes
 make functions-dev    # Correr Functions localmente con emuladores
 make setup            # Instalar todo desde cero
 make clean            # Limpiar y reinstalar Flutter deps
@@ -98,40 +103,42 @@ make clean            # Limpiar y reinstalar Flutter deps
 
 ```
 configs/{configId}
-  elderName: string          # Nombre del abuelo
-  contacts: Array<{name, phone}>  # Familiares (E.164)
-  ownerUid: string           # UID del familiar dueño
-  writeToken: string         # UUID v4, incluido en el QR
-  fcmTokens: Array<string>   # Tokens FCM del familiar
+  elderName: string           # Nombre del Pingo
+  familiarName: string        # Nombre del familiar (aparece en los botones del Pingo)
+  contacts: Array<{name, phone}>  # Contactos adicionales (E.164)
+  ownerUid: string            # UID Firebase Auth del familiar que creó esto
+  writeToken: string          # UUID v4, incluido en el QR
+  fcmTokens: Array<string>    # Tokens FCM del familiar para notificaciones
   createdAt: Timestamp
 
-sessions/{configId}          # Un doc por config, se sobreescribe
+sessions/{configId}           # Un doc por config, se sobreescribe en cada sesión
   active: boolean
   lat: number
   lng: number
   accuracy: number
-  writeToken: string         # El abuelo lo incluye para pasar security rules
+  writeToken: string          # El Pingo lo incluye para pasar security rules
   updatedAt: Timestamp
-  expiresAt: Timestamp       # now + 60 minutos
+  expiresAt: Timestamp        # now + 60 minutos, verificado server-side en las rules
 ```
 
 ### Flujo QR de emparejamiento
 
 1. **Familiar** crea una configuración → Firestore genera `configId` + `writeToken`
-2. **Familiar** muestra QR con payload: `{ v:1, configId, writeToken, elderName }`
-3. **Abuelo** escanea el QR → guarda `configId` + `writeToken` en SharedPreferences
-4. **Abuelo** toca el botón → escribe en `sessions/{configId}` usando el `writeToken` como autorización
+2. **Familiar** muestra QR con payload: `{ v:1, configId, writeToken, familiarName }`
+3. **Pingo** escanea el QR → guarda `configId` + `writeToken` + `familiarName` en SharedPreferences
+4. **Pingo** ve un botón por cada familiar escaneado: "Avisar ubicación a [familiarName]"
 
 ### Flujo de sesión
 
 ```
-Abuelo toca botón
+Pingo toca el botón de un familiar
   → Pide permiso de ubicación
   → Escribe sessions/{configId}: { active: true, lat, lng, writeToken, expiresAt }
-  → Cloud Function detecta cambio → envía FCM a fcmTokens del familiar
-  → Timer cada 30s actualiza lat/lng en Firestore
+  → Cloud Function detecta cambio → envía FCM solo al familiar de ese configId
+  → Timer cada 30s actualiza lat/lng en Firestore (hasta que expiresAt caduque)
   → Familiar ve tarjeta verde instantáneamente (stream en tiempo real)
   → Familiar toca "Ver mapa" → mapa OpenStreetMap con posición en vivo
+  → A los 60 min la sesión caduca (server-side) — el Pingo puede iniciar una nueva
 ```
 
 ### Stack
@@ -153,13 +160,24 @@ Abuelo toca botón
 
 ---
 
-## Deploy Cloud Functions
+## Deploy
 
 ```bash
-make functions-deploy
+make deploy           # Despliega todo (Functions + Firestore rules + indexes)
+make rules-deploy     # Solo reglas — útil tras cambiar firestore.rules
+make functions-deploy # Solo Functions
 ```
 
-Requiere plan Blaze. La función `onSessionStarted` se dispara en Firestore cuando `sessions/{configId}.active` cambia de `false` a `true` y envía FCM a todos los `fcmTokens` del familiar dueño.
+Requiere plan Blaze. La función `onSessionStarted` se dispara cuando `sessions/{configId}.active` cambia de `false` a `true` y envía FCM a los `fcmTokens` del familiar dueño de ese config.
+
+---
+
+## Seguridad
+
+- La ubicación del Pingo solo la puede leer el familiar dueño del config (`ownerUid`)
+- El Pingo solo puede escribir sesiones si tiene el `writeToken` correcto (incluido en el QR)
+- Las sesiones tienen expiración de 60 min verificada **server-side** en Firestore rules
+- `google-services.json` y `GoogleService-Info.plist` están en `.gitignore` — nunca se suben al repo
 
 ---
 
@@ -168,7 +186,7 @@ Requiere plan Blaze. La función `onSessionStarted` se dispara en Firestore cuan
 - Sin servidor Express propio — Firebase es el backend
 - Sin polling — solo Firestore streams y FCM
 - Sin historial de ubicaciones — solo posición más reciente
-- Sin autenticación email/password — Firebase Auth anónimo
+- Sin autenticación email/password — Firebase Auth anónimo (sin recuperación de cuenta)
 - Sin web app — solo móvil
 - Sin tests — es MVP
 - Sin i18n formal — todo hardcoded en español en `lib/core/strings.dart`
