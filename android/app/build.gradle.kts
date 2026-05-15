@@ -53,6 +53,12 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    lint {
+        // False positive from flutter_background_geolocation — HeadlessTask is a Service
+        // defined inside the plugin's AAR, invisible to lint at compile time.
+        disable += "Instantiatable"
+    }
 }
 
 flutter {
