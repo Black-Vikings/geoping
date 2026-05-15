@@ -1,3 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,23 +14,29 @@ class PingoSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pairings = ref.watch(pingoConfigsProvider);
+    final userAsync = ref.watch(authProvider);
+    final user = userAsync.value;
+    final isAnonymous = user?.isAnonymous ?? true;
 
     return Scaffold(
       appBar: AppBar(title: const Text(S.configuracion)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          if (pairings.isEmpty)
-            _EmptySettings()
-          else ...[
-            Text(
-              'Familiares conectados',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[500],
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-            ),
+          // ── Cuenta ──────────────────────────────────────────────────────────
+          _SectionLabel(label: 'Cuenta'),
+          const SizedBox(height: 10),
+          isAnonymous
+              ? _LinkGoogleCard(onLink: () => _linkGoogle(context, ref))
+              : _GoogleAccountCard(
+                  user: user!,
+                  onSignOut: () => _signOut(context),
+                ),
+          const SizedBox(height: 32),
+
+          // ── Familiares conectados ────────────────────────────────────────────
+          if (pairings.isNotEmpty) ...[
+            _SectionLabel(label: 'Familiares conectados'),
             const SizedBox(height: 10),
             Container(
               decoration: BoxDecoration(
@@ -43,9 +51,8 @@ class PingoSettingsScreen extends ConsumerWidget {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer,
+                          color:
+                              Theme.of(context).colorScheme.primaryContainer,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -67,8 +74,8 @@ class PingoSettingsScreen extends ConsumerWidget {
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline_rounded,
                             color: AppTheme.colorDanger),
-                        onPressed: () => _confirmDelete(
-                            context, ref, pairings[i].configId),
+                        onPressed: () =>
+                            _confirmDelete(context, ref, pairings[i].configId),
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.only(
@@ -89,15 +96,12 @@ class PingoSettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 32),
           ],
+
+          if (pairings.isEmpty && isAnonymous) _EmptySettings(),
+
+          // ── Zona peligrosa ─────────────────────────────────────────────────
           if (pairings.isNotEmpty) ...[
-            Text(
-              'Zona peligrosa',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[500],
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-            ),
+            _SectionLabel(label: 'Zona peligrosa'),
             const SizedBox(height: 10),
             Container(
               decoration: BoxDecoration(
@@ -134,6 +138,40 @@ class PingoSettingsScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _linkGoogle(BuildContext context, WidgetRef ref) async {
+    final localPairings = ref.read(pingoConfigsProvider);
+    try {
+      final UserCredential cred;
+      if (kIsWeb) {
+        cred = await FirebaseAuth.instance.currentUser!
+            .linkWithPopup(GoogleAuthProvider());
+      } else {
+        cred = await FirebaseAuth.instance.currentUser!
+            .linkWithProvider(GoogleAuthProvider());
+      }
+      await ref
+          .read(pingoConfigsProvider.notifier)
+          .migrateLocalToFirestore(cred.user!.uid, localPairings);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al vincular: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _signOut(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+    if (context.mounted) context.go('/');
+  }
+
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, String configId) async {
     final confirmed = await showDialog<bool>(
@@ -160,11 +198,139 @@ class PingoSettingsScreen extends ConsumerWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Colors.grey[500],
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+    );
+  }
+}
+
+class _LinkGoogleCard extends StatelessWidget {
+  const _LinkGoogleCard({required this.onLink});
+  final VoidCallback onLink;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0x1A000000)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.blue.withAlpha(20),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.account_circle_rounded,
+              size: 22, color: Colors.blue),
+        ),
+        title: const Text('Vincular con Google',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        subtitle: const Text(
+          'Guarda tus conexiones en la nube',
+          style: TextStyle(fontSize: 13),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+        onTap: onLink,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+}
+
+class _GoogleAccountCard extends StatelessWidget {
+  const _GoogleAccountCard({required this.user, required this.onSignOut});
+  final User user;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0x1A000000)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: user.photoURL != null
+                ? CircleAvatar(
+                    radius: 18,
+                    backgroundImage: NetworkImage(user.photoURL!),
+                  )
+                : Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.green.withAlpha(20),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.account_circle_rounded,
+                        size: 22, color: Colors.green),
+                  ),
+            title: Text(
+              user.displayName ?? 'Google',
+              style:
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              user.email ?? '',
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            trailing: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.green.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('Sincronizado',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600)),
+            ),
+            shape: const RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(12))),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.logout_rounded, color: AppTheme.colorDanger),
+            title: const Text('Cerrar sesión',
+                style: TextStyle(
+                    color: AppTheme.colorDanger, fontWeight: FontWeight.w600)),
+            onTap: onSignOut,
+            shape: const RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(12))),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptySettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
+      padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         children: [
           Container(

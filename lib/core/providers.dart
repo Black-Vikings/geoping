@@ -66,46 +66,106 @@ final sessionProvider =
 });
 
 // ---------------------------------------------------------------------------
-// Pingo: pairings guardados localmente
+// Pingo: pairings — local (anónimo) o Firestore (Google)
 // ---------------------------------------------------------------------------
 
 final pingoConfigsProvider =
     NotifierProvider<PingoPairingsNotifier, List<PingoPairing>>(PingoPairingsNotifier.new);
 
 class PingoPairingsNotifier extends Notifier<List<PingoPairing>> {
-  static const _key = 'pingo_pairings';
+  static const _prefsKey = 'pingo_pairings';
+  static const _firestoreField = 'pingoPairings';
+
+  // Prevents a stale _loadFromFirestore from overwriting state during migration.
+  bool _migrating = false;
 
   SharedPreferences? get _prefs => ref.read(_prefsProvider).value;
 
   @override
   List<PingoPairing> build() {
-    final prefs = ref.watch(_prefsProvider).value;
-    return _loadFromPrefs(prefs);
+    final user = ref.watch(authProvider).value;
+
+    if (user != null && !user.isAnonymous) {
+      _loadFromFirestore(user.uid);
+      return [];
+    }
+
+    return _loadFromPrefs(ref.watch(_prefsProvider).value);
+  }
+
+  Future<void> _loadFromFirestore(String uid) async {
+    try {
+      final doc =
+          await FirebaseFirestore.instance.doc('users/$uid').get();
+      if (_migrating) return;
+      if (doc.exists) {
+        final raw =
+            (doc.data()?[_firestoreField] as List<dynamic>?) ?? [];
+        state = raw
+            .map((e) =>
+                PingoPairing.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      }
+    } catch (_) {}
   }
 
   static List<PingoPairing> _loadFromPrefs(SharedPreferences? prefs) {
-    final raw = prefs?.getStringList(_key) ?? [];
+    final raw = prefs?.getStringList(_prefsKey) ?? [];
     return raw
         .map((e) => PingoPairing.fromJson(
             Map<String, dynamic>.from(jsonDecode(e) as Map)))
         .toList();
   }
 
+  bool get _isGoogleUser {
+    final user = FirebaseAuth.instance.currentUser;
+    return user != null && !user.isAnonymous;
+  }
+
   Future<void> addPairing(PingoPairing pairing) async {
     final updated = [...state, pairing];
-    await _persist(updated);
+    await _save(updated);
     state = updated;
   }
 
   Future<void> removePairing(String configId) async {
     final updated = state.where((p) => p.configId != configId).toList();
-    await _persist(updated);
+    await _save(updated);
     state = updated;
   }
 
-  Future<void> _persist(List<PingoPairing> list) async {
+  Future<void> _save(List<PingoPairing> list) async {
+    if (_isGoogleUser) {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await FirebaseFirestore.instance.doc('users/$uid').set(
+        {_firestoreField: list.map((p) => p.toJson()).toList()},
+        SetOptions(merge: true),
+      );
+    } else {
+      await _persistLocally(list);
+    }
+  }
+
+  Future<void> _persistLocally(List<PingoPairing> list) async {
     final raw = list.map((p) => jsonEncode(p.toJson())).toList();
-    await _prefs?.setStringList(_key, raw);
+    await _prefs?.setStringList(_prefsKey, raw);
+  }
+
+  /// Migrates local pairings to Firestore after linking a Google account.
+  /// Call this right after [FirebaseAuth.currentUser.linkWithProvider] succeeds.
+  Future<void> migrateLocalToFirestore(
+      String uid, List<PingoPairing> localPairings) async {
+    _migrating = true;
+    try {
+      await FirebaseFirestore.instance.doc('users/$uid').set(
+        {_firestoreField: localPairings.map((p) => p.toJson()).toList()},
+        SetOptions(merge: true),
+      );
+      await _prefs?.remove(_prefsKey);
+      state = localPairings;
+    } finally {
+      _migrating = false;
+    }
   }
 }
 
