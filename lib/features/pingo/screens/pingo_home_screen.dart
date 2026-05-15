@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/models/pingo_pairing.dart';
+import '../../../core/models/user_role.dart';
 import '../../../core/providers.dart';
 import '../../../core/strings.dart';
 import '../../../core/theme.dart';
@@ -41,12 +44,45 @@ class PingoHomeScreen extends ConsumerWidget {
 // Empty state
 // ---------------------------------------------------------------------------
 
-class _EmptyState extends StatelessWidget {
+class _EmptyState extends ConsumerStatefulWidget {
   const _EmptyState({required this.onScan});
   final VoidCallback onScan;
 
   @override
+  ConsumerState<_EmptyState> createState() => _EmptyStateState();
+}
+
+class _EmptyStateState extends ConsumerState<_EmptyState> {
+  bool _signingIn = false;
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _signingIn = true);
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      ref.read(roleProvider.notifier).setRole(UserRole.pingo);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al iniciar sesión: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _signingIn = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isAnonymous =
+        ref.watch(authProvider).value?.isAnonymous ?? true;
+
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
@@ -80,7 +116,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 40),
           FilledButton.icon(
-            onPressed: onScan,
+            onPressed: widget.onScan,
             icon: const Icon(Icons.qr_code_scanner_rounded),
             label: const Text(S.escanearQr),
             style: FilledButton.styleFrom(
@@ -89,6 +125,19 @@ class _EmptyState extends StatelessWidget {
                   const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
           ),
+          if (isAnonymous) ...[
+            const SizedBox(height: 16),
+            _signingIn
+                ? const Center(child: CircularProgressIndicator())
+                : OutlinedButton.icon(
+                    onPressed: _signInWithGoogle,
+                    icon: const Icon(Icons.login_rounded),
+                    label: const Text('Recuperar mis configuraciones'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                  ),
+          ],
         ],
       ),
     );
