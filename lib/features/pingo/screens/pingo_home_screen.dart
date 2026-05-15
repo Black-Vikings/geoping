@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,14 +23,16 @@ class PingoHomeScreen extends ConsumerWidget {
         title: const Text(S.appName),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings_rounded),
             onPressed: () => context.push('/pingo/settings'),
           ),
         ],
       ),
-      body: pairings.isEmpty
-          ? _EmptyState(onScan: () => context.push('/pingo/pair'))
-          : _PairingList(pairings: pairings),
+      body: SafeArea(
+        child: pairings.isEmpty
+            ? _EmptyState(onScan: () => context.push('/pingo/pair'))
+            : _PairingList(pairings: pairings),
+      ),
     );
   }
 }
@@ -49,8 +53,17 @@ class _EmptyState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.qr_code_scanner, size: 80, color: Colors.grey),
-          const SizedBox(height: 24),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.grey.withAlpha(30),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.qr_code_scanner_rounded,
+                size: 40, color: Colors.grey),
+          ),
+          const SizedBox(height: 20),
           Text(
             S.pingoSinConfig,
             textAlign: TextAlign.center,
@@ -68,10 +81,13 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 40),
           FilledButton.icon(
             onPressed: onScan,
-            icon: const Icon(Icons.qr_code_scanner),
+            icon: const Icon(Icons.qr_code_scanner_rounded),
             label: const Text(S.escanearQr),
-            style:
-                FilledButton.styleFrom(minimumSize: const Size.fromHeight(64)),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(64),
+              textStyle:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -80,7 +96,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// List of pairings — one card/button per familiar
+// List of pairings — one card per familiar
 // ---------------------------------------------------------------------------
 
 class _PairingList extends ConsumerWidget {
@@ -90,24 +106,27 @@ class _PairingList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             '¿A quién quieres avisar?',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(color: Colors.grey[700]),
           ),
-          const SizedBox(height: 32),
-          ...pairings.map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: _FamiliarButton(pairing: p),
-              )),
           const SizedBox(height: 24),
+          ...pairings.map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _FamiliarCard(pairing: p),
+              )),
+          const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () => context.push('/pingo/pair'),
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.qr_code_scanner_rounded),
             label: const Text(S.escanearQr),
           ),
         ],
@@ -117,11 +136,11 @@ class _PairingList extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// One button per familiar — shows active/idle state inline
+// State switcher
 // ---------------------------------------------------------------------------
 
-class _FamiliarButton extends ConsumerWidget {
-  const _FamiliarButton({required this.pairing});
+class _FamiliarCard extends ConsumerWidget {
+  const _FamiliarCard({required this.pairing});
   final PingoPairing pairing;
 
   @override
@@ -129,8 +148,8 @@ class _FamiliarButton extends ConsumerWidget {
     final sessionState = ref.watch(sessionNotifierProvider(pairing.configId));
 
     return sessionState.map(
-      idle: (_) => _SendButton(
-        label: '${S.avisarUbicacion}\na ${pairing.familiarName}',
+      idle: (_) => _IdleCard(
+        familiarName: pairing.familiarName,
         onPressed: () => ref
             .read(sessionNotifierProvider(pairing.configId).notifier)
             .startSession(pairing.writeToken),
@@ -155,35 +174,86 @@ class _FamiliarButton extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-widgets
+// State: idle — big send button
 // ---------------------------------------------------------------------------
 
-class _SendButton extends StatelessWidget {
-  const _SendButton({required this.label, required this.onPressed});
-  final String label;
+class _IdleCard extends StatelessWidget {
+  const _IdleCard({required this.familiarName, required this.onPressed});
+  final String familiarName;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        backgroundColor: AppTheme.colorBotonAbuelo,
-        minimumSize: const Size.fromHeight(88),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          height: 1.3,
+    final initial = familiarName.isNotEmpty
+        ? familiarName[0].toUpperCase()
+        : '?';
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: cs.primaryContainer,
+                  child: Text(
+                    initial,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        familiarName,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        'Tu familiar',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.location_on_rounded, size: 24),
+              label: const Text(S.avisarUbicacion),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.colorBotonAbuelo,
+                minimumSize: const Size.fromHeight(72),
+                textStyle:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// State: starting — loading
+// ---------------------------------------------------------------------------
 
 class _LoadingCard extends StatelessWidget {
   const _LoadingCard({required this.name});
@@ -193,13 +263,29 @@ class _LoadingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+        child: Column(
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 16),
-            Text('Conectando con $name…',
-                style: const TextStyle(fontSize: 18)),
+            const SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: AppTheme.colorBotonAbuelo,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Avisando a $name…',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Compartiendo tu ubicación',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
           ],
         ),
       ),
@@ -207,7 +293,11 @@ class _LoadingCard extends StatelessWidget {
   }
 }
 
-class _ActiveCard extends StatelessWidget {
+// ---------------------------------------------------------------------------
+// State: active — session running, auto-refreshes every 30s
+// ---------------------------------------------------------------------------
+
+class _ActiveCard extends StatefulWidget {
   const _ActiveCard({
     required this.familiarName,
     required this.expiresAt,
@@ -218,52 +308,134 @@ class _ActiveCard extends StatelessWidget {
   final VoidCallback onStop;
 
   @override
+  State<_ActiveCard> createState() => _ActiveCardState();
+}
+
+class _ActiveCardState extends State<_ActiveCard> {
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final minutes =
-        expiresAt.difference(DateTime.now()).inMinutes.clamp(0, 60);
+    final remaining = widget.expiresAt.difference(DateTime.now());
+    final minutes = remaining.inMinutes.clamp(0, 120);
+    final initial = widget.familiarName.isNotEmpty
+        ? widget.familiarName[0].toUpperCase()
+        : '?';
 
     return Card(
-      color: AppTheme.colorSesionActiva.withAlpha(20),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppTheme.colorSesionActiva, width: 2),
+      color: AppTheme.colorSesionActiva.withAlpha(12),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+        side: BorderSide(color: AppTheme.colorSesionActiva, width: 1.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Status badge
             Row(
               children: [
-                const Icon(Icons.location_on,
-                    color: AppTheme.colorSesionActiva, size: 28),
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.colorSesionActiva,
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(
+                const Text(
+                  'SESIÓN ACTIVA',
+                  style: TextStyle(
+                    color: AppTheme.colorSesionActiva,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.colorSesionActiva.withAlpha(22),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   child: Text(
-                    S.sesionActiva,
+                    '$minutes ${S.minRestantes}',
                     style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: AppTheme.colorSesionActiva,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              '${S.visiblePara} $familiarName · $minutes ${S.minRestantes}',
-              style: const TextStyle(fontSize: 16),
+            const SizedBox(height: 14),
+            // Familiar info
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppTheme.colorSesionActiva.withAlpha(28),
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.colorSesionActiva,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.familiarName,
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        'puede ver tu ubicación',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+            // Stop button
             OutlinedButton.icon(
-              onPressed: onStop,
-              icon: const Icon(Icons.stop_circle, color: Colors.red),
-              label: const Text(S.detenerSesion,
-                  style: TextStyle(color: Colors.red, fontSize: 16)),
+              onPressed: widget.onStop,
+              icon: const Icon(Icons.stop_circle_rounded,
+                  color: AppTheme.colorDanger, size: 20),
+              label: const Text(
+                S.detenerSesion,
+                style: TextStyle(
+                    color: AppTheme.colorDanger, fontWeight: FontWeight.w700),
+              ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
-                minimumSize: const Size.fromHeight(48),
+                side: const BorderSide(color: AppTheme.colorDanger),
+                minimumSize: const Size.fromHeight(52),
               ),
             ),
           ],
@@ -272,6 +444,10 @@ class _ActiveCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// State: error
+// ---------------------------------------------------------------------------
 
 class _ErrorCard extends StatelessWidget {
   const _ErrorCard({
@@ -286,25 +462,47 @@ class _ErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: AppTheme.colorDangerSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: AppTheme.colorDanger.withAlpha(60)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Error al enviar a $familiarName',
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red),
+            Row(
+              children: [
+                const Icon(Icons.error_outline_rounded,
+                    color: AppTheme.colorDanger, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Error al avisar a $familiarName',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.colorDanger,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(message,
-                style: const TextStyle(fontSize: 14, color: Colors.red)),
-            const SizedBox(height: 12),
-            FilledButton(
+            const SizedBox(height: 6),
+            Text(
+              message,
+              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
               onPressed: onRetry,
-              child: const Text(S.reintentar),
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: const Text(S.reintentar),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.colorBotonAbuelo,
+                minimumSize: const Size.fromHeight(52),
+              ),
             ),
           ],
         ),

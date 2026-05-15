@@ -23,7 +23,7 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
     setState(() => _loading = true);
     try {
       await FirebaseAuth.instance.signInAnonymously();
-      await ref.read(roleProvider.notifier).setRole(role);
+      ref.read(roleProvider.notifier).setRole(role);
       if (!mounted) return;
       context.go(role == UserRole.pingo ? '/pingo' : '/familiar');
     } catch (e) {
@@ -41,13 +41,25 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.location_on, size: 80, color: AppTheme.colorBotonAbuelo),
-              const SizedBox(height: 24),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppTheme.colorBotonAbuelo.withAlpha(18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  size: 44,
+                  color: AppTheme.colorBotonAbuelo,
+                ),
+              ),
+              const SizedBox(height: 20),
               Text(
                 S.appName,
                 textAlign: TextAlign.center,
@@ -57,34 +69,109 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
               Text(
                 S.rolSeleccionSubtitulo,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyLarge
+                    ?.copyWith(color: Colors.grey[600]),
               ),
-              const SizedBox(height: 64),
+              const SizedBox(height: 56),
               if (_loading)
                 const Center(child: CircularProgressIndicator())
               else ...[
-                FilledButton.icon(
-                  onPressed: () => _selectRole(UserRole.pingo),
-                  icon: const Icon(Icons.person, size: 28),
-                  label: const Text(S.rolPingo),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.colorBotonAbuelo,
-                    minimumSize: const Size.fromHeight(72),
-                    textStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
+                _RoleOptionCard(
+                  icon: Icons.person_rounded,
+                  title: S.rolPingo,
+                  subtitle: 'Comparte tu ubicación con un solo toque',
+                  color: AppTheme.colorBotonAbuelo,
+                  onTap: () => _selectRole(UserRole.pingo),
                 ),
                 const SizedBox(height: 16),
-                FilledButton.tonal(
-                  onPressed: () => _selectRole(UserRole.familiar),
-                  child: const Text(S.rolFamiliar),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(72),
-                    textStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
+                _RoleOptionCard(
+                  icon: Icons.family_restroom_rounded,
+                  title: S.rolFamiliar,
+                  subtitle: 'Monitorea la ubicación de tus seres queridos',
+                  color: Theme.of(context).colorScheme.secondary,
+                  onTap: () => _selectRole(UserRole.familiar),
+                  tonal: true,
                 ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleOptionCard extends StatelessWidget {
+  const _RoleOptionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.tonal = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final bool tonal;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = tonal ? color.withAlpha(18) : color;
+    final fg = tonal ? color : Colors.white;
+    final subtitleColor = tonal ? color.withAlpha(180) : Colors.white.withAlpha(210);
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        splashColor: fg.withAlpha(30),
+        highlightColor: fg.withAlpha(15),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: fg.withAlpha(tonal ? 40 : 50),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: fg, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: fg,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: subtitleColor),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.arrow_forward_ios_rounded, color: fg.withAlpha(150), size: 16),
             ],
           ),
         ),
