@@ -33,7 +33,7 @@ service cloud.firestore {
       allow write: if request.auth != null
         && request.resource.data.writeToken
            == get(/databases/$(database)/documents/configs/$(configId)).data.writeToken
-        && request.resource.data.keys().hasOnly(['writeToken', 'lat', 'lng', 'expiresAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['writeToken', 'lat', 'lng', 'accuracy', 'active', 'expiresAt', 'updatedAt'])
         && (
              // Session start: expiresAt in the future
              (request.resource.data.keys().hasAll(['expiresAt'])
