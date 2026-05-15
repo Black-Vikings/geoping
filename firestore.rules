@@ -2,15 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Pingo user document: only the owner can read/write their own pairings.
+    // Delete is allowed so users can wipe their own data.
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['pingoPairings']);
     }
 
+    // Familiar configs: only authenticated non-anonymous users can create/manage.
     match /configs/{configId} {
-      allow read, write: if request.auth != null
+      allow read, update, delete: if request.auth != null
+        && !request.auth.token.firebase.sign_in_provider.matches('anonymous')
         && request.auth.uid == resource.data.ownerUid;
 
       allow create: if request.auth != null
+        && !request.auth.token.firebase.sign_in_provider.matches('anonymous')
         && request.auth.uid == request.resource.data.ownerUid;
     }
 
@@ -20,19 +28,26 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/configs/$(configId)).data.ownerUid
            == request.auth.uid;
 
-      // Pingo can write if writeToken matches AND session is not expired
+      // Pingo can write (start/update) if writeToken matches and session is not expired.
+      // Only allowed fields: writeToken, lat, lng, expiresAt, updatedAt.
       allow write: if request.auth != null
         && request.resource.data.writeToken
            == get(/databases/$(database)/documents/configs/$(configId)).data.writeToken
+        && request.resource.data.keys().hasOnly(['writeToken', 'lat', 'lng', 'expiresAt', 'updatedAt'])
         && (
-             // Session start: expiresAt is included and is in the future
+             // Session start: expiresAt in the future
              (request.resource.data.keys().hasAll(['expiresAt'])
               && request.resource.data.expiresAt > request.time)
              ||
-             // Location update: check that the existing session has not expired
+             // Location update: existing session must not be expired
              (resource != null
               && resource.data.expiresAt > request.time)
            );
+
+      // Pingo can delete (stop) their own active session via writeToken
+      allow delete: if request.auth != null
+        && resource.data.writeToken
+           == get(/databases/$(database)/documents/configs/$(configId)).data.writeToken;
     }
   }
 }
