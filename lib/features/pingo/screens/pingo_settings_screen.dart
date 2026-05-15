@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -172,11 +173,52 @@ class PingoSettingsScreen extends ConsumerWidget {
       await onSuccess(cred.user!.uid);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'credential-already-in-use' && e.credential != null) {
-        // Google account already exists — sign into it and migrate pairings
         try {
           final cred =
               await FirebaseAuth.instance.signInWithCredential(e.credential!);
-          await onSuccess(cred.user!.uid);
+          final uid = cred.user!.uid;
+
+          // Check if the existing Firestore account already has pairings
+          final doc = await FirebaseFirestore.instance.doc('users/$uid').get();
+          final existing = (doc.data()?['pingoPairings'] as List?)?.length ?? 0;
+
+          if (!context.mounted) return;
+
+          if (existing > 0 && localPairings.isNotEmpty) {
+            // Both sides have data — ask the user what to do
+            final overwrite = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Cuenta con configuraciones existentes'),
+                content: Text(
+                  'Esta cuenta ya tiene $existing configuración${existing == 1 ? '' : 'es'} guardada${existing == 1 ? '' : 's'} en la nube.\n\n'
+                  '¿Qué quieres hacer con tus configuraciones locales?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Usar las de la nube'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Reemplazar con las locales',
+                        style: TextStyle(color: AppTheme.colorDanger)),
+                  ),
+                ],
+              ),
+            );
+            if (overwrite == null) return; // cancelled
+            if (overwrite) {
+              await onSuccess(uid); // overwrites cloud with local
+            } else {
+              // Just sign in and load cloud data — no migration
+              ref.read(roleProvider.notifier).setRole(UserRole.pingo);
+              if (context.mounted) context.go('/pingo');
+            }
+          } else {
+            // No conflict — migrate silently
+            await onSuccess(uid);
+          }
         } catch (inner) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
