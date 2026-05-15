@@ -41,6 +41,25 @@ El Familiar crea la configuración en la web, genera un QR y se lo muestra al Pi
 
 ## Setup inicial
 
+### 0. Restaurar archivos sensibles
+
+Los archivos de firma y configuración de Firebase no están en git. Se guardan en `_secret_config/` (fuera del repo). Copia esa carpeta al proyecto y ejecuta:
+
+```bash
+bash _secret_config/setup.sh
+```
+
+Esto coloca automáticamente:
+
+| Archivo | Destino |
+|---------|---------|
+| `google-services.json` | `android/app/` |
+| `GoogleService-Info.plist` | `ios/Runner/` |
+| `key.properties` | `android/` |
+| `upload-keystore.jks` | `android/` |
+
+> Si no tienes la carpeta `_secret_config/`, pídela al equipo. Sin estos archivos no se puede compilar release ni conectar Firebase.
+
 ### 1. Inicializar proyecto Firebase
 
 ```bash
