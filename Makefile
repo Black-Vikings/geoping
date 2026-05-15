@@ -3,7 +3,7 @@ PROJECT_ID  ?= geoping-b30a1
 ANDROID_PKG ?= com.blackvikings.geoping
 IOS_BUNDLE  ?= com.blackvikings.geoping
 
-.PHONY: run emu device build-apk build-ios deploy functions-deploy rules-deploy functions-dev setup clean codegen firebase-init firebase-delete firebase-configure web-dev web-build web-deploy
+.PHONY: run emu device build-apk build-aab build-ios deploy functions-deploy rules-deploy functions-dev setup clean codegen firebase-init firebase-delete firebase-configure web-dev web-build web-deploy
 
 run:
 	flutter run
@@ -17,6 +17,9 @@ device:
 
 build-apk:
 	flutter build apk --release
+
+build-aab:
+	flutter build appbundle --release
 
 build-ios:
 	flutter build ipa --release
