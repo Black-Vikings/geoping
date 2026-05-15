@@ -44,6 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android signing key — never commit
+android/key.properties
+*.jks
+*.keystore
+
 # Firebase config — download from Firebase Console and place manually
 google-services.json
 GoogleService-Info.plist
