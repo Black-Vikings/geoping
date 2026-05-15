@@ -34,11 +34,6 @@
             </intent-filter>
         </activity>
 
-        <!-- FCM -->
-        <service
-            android:name="com.transistorsoft.flutter.backgroundgeolocation.HeadlessTask"
-            android:exported="false" />
-
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

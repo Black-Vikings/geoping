@@ -1,7 +1,7 @@
 name: geopping
 description: Comparte tu ubicación en tiempo real con tu familia con un solo toque.
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: '>=3.11.4 <4.0.0'
@@ -25,7 +25,6 @@ dependencies:
   json_annotation: ^4.11.0
 
   # Location
-  flutter_background_geolocation: ^5.2.0
   geolocator: ^14.0.2
 
   # Map
