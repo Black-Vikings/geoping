@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../core/models/user_role.dart';
 import '../../core/providers.dart';
@@ -29,6 +30,30 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
     try {
       await FirebaseAuth.instance.signInAnonymously();
       ref.read(roleProvider.notifier).setRole(role);
+      if (!mounted) return;
+      context.go('/pingo');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${S.errorConexion}: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInAsPingo() async {
+    setState(() => _loading = true);
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      ref.read(roleProvider.notifier).setRole(UserRole.pingo);
       if (!mounted) return;
       context.go('/pingo');
     } catch (e) {
@@ -89,6 +114,17 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                   subtitle: 'Comparte tu ubicación con un solo toque',
                   color: AppTheme.colorBotonAbuelo,
                   onTap: () => _selectRole(UserRole.pingo),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _signInAsPingo,
+                    icon: const Icon(Icons.login_rounded, size: 18),
+                    label: const Text('Ya tengo cuenta de Pingo'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.colorBotonAbuelo,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 _RoleOptionCard(
