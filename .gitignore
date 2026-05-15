@@ -68,3 +68,4 @@ functions/*.local
 # Freezed / json_serializable generated files (regenerate with: make codegen)
 *.freezed.dart
 *.g.dart
+_secret_config/
