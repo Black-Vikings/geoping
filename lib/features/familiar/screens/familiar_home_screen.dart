@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,7 +40,7 @@ class FamiliarHomeScreen extends ConsumerWidget {
                     ),
                     IconButton(
                       icon: const Icon(Icons.person_add_rounded),
-                      onPressed: () => context.push('/new'),
+                      onPressed: () => context.pushNamed('familiar-new'),
                       tooltip: S.agregarPingo,
                     ),
                   ],
@@ -56,7 +57,7 @@ class FamiliarHomeScreen extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => _ErrorBody(message: '${S.errorConexion}: $e'),
             data: (configs) => configs.isEmpty
-                ? _EmptyState(onAdd: () => context.push('/new'))
+                ? _EmptyState(onAdd: () => context.pushNamed('familiar-new'))
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                     itemCount: configs.length,
@@ -109,7 +110,11 @@ class _SignInPromptState extends State<_SignInPrompt> {
   Future<void> _signInWithGoogle() async {
     setState(() => _loading = true);
     try {
-      await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+      if (kIsWeb) {
+        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+      } else {
+        await FirebaseAuth.instance.signInWithProvider(GoogleAuthProvider());
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -245,12 +250,14 @@ class _ConfigCard extends ConsumerWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.qr_code_rounded),
-                  onPressed: () => context.push('/${config.id}/qr'),
+                  onPressed: () => context.pushNamed('familiar-qr',
+                      pathParameters: {'configId': config.id}),
                   tooltip: S.generarQr,
                 ),
                 IconButton(
                   icon: const Icon(Icons.settings_rounded),
-                  onPressed: () => context.push('/${config.id}/settings'),
+                  onPressed: () => context.pushNamed('familiar-settings',
+                      pathParameters: {'configId': config.id}),
                 ),
               ],
             ),
@@ -276,7 +283,8 @@ class _ConfigCard extends ConsumerWidget {
                     if (isActive) ...[
                       const SizedBox(height: 12),
                       FilledButton.icon(
-                        onPressed: () => context.push('/${config.id}/map'),
+                        onPressed: () => context.pushNamed('familiar-map',
+                            pathParameters: {'configId': config.id}),
                         icon: const Icon(Icons.map_rounded, size: 18),
                         label: const Text(S.verMapa),
                         style: FilledButton.styleFrom(

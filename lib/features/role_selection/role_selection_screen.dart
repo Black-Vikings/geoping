@@ -20,12 +20,17 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
   bool _loading = false;
 
   Future<void> _selectRole(UserRole role) async {
+    if (role == UserRole.familiar) {
+      ref.read(roleProvider.notifier).setRole(role);
+      context.go('/familiar');
+      return;
+    }
     setState(() => _loading = true);
     try {
       await FirebaseAuth.instance.signInAnonymously();
       ref.read(roleProvider.notifier).setRole(role);
       if (!mounted) return;
-      context.go(role == UserRole.pingo ? '/pingo' : '/familiar');
+      context.go('/pingo');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
