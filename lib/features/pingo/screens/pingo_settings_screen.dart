@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/models/pingo_pairing.dart';
 import '../../../core/models/user_role.dart';
 import '../../../core/providers.dart';
 import '../../../core/strings.dart';
@@ -178,47 +179,24 @@ class PingoSettingsScreen extends ConsumerWidget {
               await FirebaseAuth.instance.signInWithCredential(e.credential!);
           final uid = cred.user!.uid;
 
-          // Check if the existing Firestore account already has pairings
+          // Merge cloud pairings with local ones (cloud wins on duplicate configId)
           final doc = await FirebaseFirestore.instance.doc('users/$uid').get();
-          final existing = (doc.data()?['pingoPairings'] as List?)?.length ?? 0;
+          final cloudRaw =
+              (doc.data()?['pingoPairings'] as List<dynamic>?) ?? [];
+          final cloudPairings = cloudRaw
+              .map((e) => PingoPairing.fromJson(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList();
+          final merged = {
+            for (final p in [...localPairings, ...cloudPairings])
+              p.configId: p,
+          }.values.toList();
 
-          if (!context.mounted) return;
-
-          if (existing > 0 && localPairings.isNotEmpty) {
-            // Both sides have data — ask the user what to do
-            final overwrite = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Cuenta con configuraciones existentes'),
-                content: Text(
-                  'Esta cuenta ya tiene $existing configuración${existing == 1 ? '' : 'es'} guardada${existing == 1 ? '' : 's'} en la nube.\n\n'
-                  '¿Qué quieres hacer con tus configuraciones locales?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Usar las de la nube'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Reemplazar con las locales',
-                        style: TextStyle(color: AppTheme.colorDanger)),
-                  ),
-                ],
-              ),
-            );
-            if (overwrite == null) return; // cancelled
-            if (overwrite) {
-              await onSuccess(uid); // overwrites cloud with local
-            } else {
-              // Just sign in and load cloud data — no migration
-              ref.read(roleProvider.notifier).setRole(UserRole.pingo);
-              if (context.mounted) context.go('/pingo');
-            }
-          } else {
-            // No conflict — migrate silently
-            await onSuccess(uid);
-          }
+          await ref
+              .read(pingoConfigsProvider.notifier)
+              .migrateLocalToFirestore(uid, merged);
+          ref.read(roleProvider.notifier).setRole(UserRole.pingo);
+          if (context.mounted) context.go('/pingo');
         } catch (inner) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
