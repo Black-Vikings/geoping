@@ -69,3 +69,5 @@ functions/*.local
 *.freezed.dart
 *.g.dart
 _secret_config/
+commandlinetools-*.zip
+tmp/
