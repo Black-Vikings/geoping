@@ -4,7 +4,7 @@ part 'pingo_pairing.freezed.dart';
 part 'pingo_pairing.g.dart';
 
 @freezed
-class PingoPairing with _$PingoPairing {
+abstract class PingoPairing with _$PingoPairing {
   const factory PingoPairing({
     required String configId,
     required String writeToken,
@@ -16,7 +16,7 @@ class PingoPairing with _$PingoPairing {
 }
 
 @freezed
-class QrPayload with _$QrPayload {
+abstract class QrPayload with _$QrPayload {
   const factory QrPayload({
     required int v,
     required String configId,

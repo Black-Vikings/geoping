@@ -28,9 +28,9 @@ abstract final class S {
   static const verMapa = 'Ver mapa';
   static const sesionActivaHace = 'Sesión activa';
   static const generarQr = 'Mostrar código QR';
-  static const nombrePingoHint = 'Nombre del Pingo (ej. Mamá, Tomás…)';
+  static const nombrePingoHint = 'Nombre del Pingo (ej. Papa)';
   static const tuNombreHint = 'Tu nombre (aparecerá en los botones del Pingo)';
-  static const tuNombreHelper = 'Ejemplo: Tomás, Aguidet, Mamá…';
+  static const tuNombreHelper = 'Ejemplo: Johana, Aided...';
   static const contactosHelper =
       'Lista de personas que recibirán la ubicación (opcional)';
   static const nombreContacto = 'Nombre';
