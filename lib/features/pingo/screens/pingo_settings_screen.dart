@@ -142,21 +142,32 @@ class PingoSettingsScreen extends ConsumerWidget {
   Future<void> _linkGoogle(BuildContext context, WidgetRef ref) async {
     final localPairings = ref.read(pingoConfigsProvider);
     try {
-      final UserCredential cred;
+      final AuthCredential credential;
       if (kIsWeb) {
-        cred = await FirebaseAuth.instance.currentUser!
+        final result = await FirebaseAuth.instance.currentUser!
             .linkWithPopup(GoogleAuthProvider());
-      } else {
-        final googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) return;
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        cred = await FirebaseAuth.instance.currentUser!
-            .linkWithCredential(credential);
+        await ref
+            .read(pingoConfigsProvider.notifier)
+            .migrateLocalToFirestore(result.user!.uid, localPairings);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
+          );
+        }
+        return;
       }
+
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+      final googleAuth = await googleUser.authentication;
+      credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final cred = await FirebaseAuth.instance.currentUser!
+          .linkWithCredential(credential);
       await ref
           .read(pingoConfigsProvider.notifier)
           .migrateLocalToFirestore(cred.user!.uid, localPairings);
@@ -166,11 +177,34 @@ class PingoSettingsScreen extends ConsumerWidget {
               content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
         );
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al vincular: $e')),
-        );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use' && e.credential != null) {
+        // Google account already has a Firebase account — sign into it and migrate
+        try {
+          final cred = await FirebaseAuth.instance
+              .signInWithCredential(e.credential!);
+          await ref
+              .read(pingoConfigsProvider.notifier)
+              .migrateLocalToFirestore(cred.user!.uid, localPairings);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
+            );
+          }
+        } catch (inner) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error al vincular: $inner')),
+            );
+          }
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al vincular: ${e.message}')),
+          );
+        }
       }
     }
   }
