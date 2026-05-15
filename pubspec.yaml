@@ -1,7 +1,7 @@
 name: geopping
 description: Comparte tu ubicación en tiempo real con tu familia con un solo toque.
 publish_to: 'none'
-version: 1.1.0+4
+version: 1.1.1+5
 
 environment:
   sdk: '>=3.11.4 <4.0.0'
