@@ -1,4 +1,4 @@
-package com.geopping.geopping
+package com.blackvikings.geoping
 
 import io.flutter.embedding.android.FlutterActivity
 
