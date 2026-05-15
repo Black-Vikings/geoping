@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -6,18 +7,24 @@ import '../services/background_service.dart';
 import 'session_state.dart';
 
 // One notifier per configId so each familiar button has independent state.
-final sessionNotifierProvider = StateNotifierProvider.family<SessionNotifier,
-    SessionState, String>((ref, configId) => SessionNotifier(ref, configId));
+final sessionNotifierProvider =
+    NotifierProvider.family<SessionNotifier, SessionState, String>(
+        (configId) => SessionNotifier(configId));
 
-class SessionNotifier extends StateNotifier<SessionState> {
-  SessionNotifier(this._ref, this._configId) : super(const SessionState.idle());
+class SessionNotifier extends Notifier<SessionState> {
+  SessionNotifier(this._configId);
 
-  final Ref _ref;
   final String _configId;
+
+  @override
+  SessionState build() => const SessionState.idle();
 
   Future<void> startSession(String writeToken) async {
     state = const SessionState.starting();
     try {
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
       final position = await _getCurrentPosition();
       final now = DateTime.now();
       final expiresAt = now.add(const Duration(hours: 1));

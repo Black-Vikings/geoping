@@ -17,41 +17,20 @@ import 'models/user_role.dart';
 final authProvider = StreamProvider<User?>(
     (ref) => FirebaseAuth.instance.authStateChanges());
 
-// ---------------------------------------------------------------------------
-// Rol (persistido en SharedPreferences)
-// ---------------------------------------------------------------------------
-
 final _prefsProvider = FutureProvider<SharedPreferences>(
     (_) => SharedPreferences.getInstance());
 
-final roleProvider = StateNotifierProvider<RoleNotifier, UserRole?>((ref) {
-  final prefs = ref.watch(_prefsProvider).valueOrNull;
-  return RoleNotifier(prefs);
-});
+// ---------------------------------------------------------------------------
+// Role selection (mobile only)
+// ---------------------------------------------------------------------------
 
-class RoleNotifier extends StateNotifier<UserRole?> {
-  RoleNotifier(this._prefs)
-      : super(_prefs != null
-            ? _roleFromString(_prefs.getString('user_role'))
-            : null);
+final roleProvider = NotifierProvider<RoleNotifier, UserRole?>(RoleNotifier.new);
 
-  final SharedPreferences? _prefs;
+class RoleNotifier extends Notifier<UserRole?> {
+  @override
+  UserRole? build() => null;
 
-  static UserRole? _roleFromString(String? value) {
-    if (value == 'pingo') return UserRole.pingo;
-    if (value == 'familiar') return UserRole.familiar;
-    return null;
-  }
-
-  Future<void> setRole(UserRole role) async {
-    await _prefs?.setString('user_role', role.name);
-    state = role;
-  }
-
-  Future<void> clearRole() async {
-    await _prefs?.remove('user_role');
-    state = null;
-  }
+  void setRole(UserRole role) => state = role;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,15 +39,15 @@ class RoleNotifier extends StateNotifier<UserRole?> {
 
 final familiarConfigsProvider = StreamProvider<List<Config>>((ref) {
   final userAsync = ref.watch(authProvider);
-  final uid = userAsync.valueOrNull?.uid;
-  if (uid == null) return const Stream.empty();
+  final uid = userAsync.value?.uid;
+  if (uid == null) return Stream.value([]);
 
   return FirebaseFirestore.instance
       .collection('configs')
       .where('ownerUid', isEqualTo: uid)
       .snapshots()
       .map((snapshot) => snapshot.docs.map((doc) {
-            final data = {...doc.data(), 'id': doc.id};
+            final data = _convertTimestamps({...doc.data(), 'id': doc.id});
             return Config.fromJson(data);
           }).toList());
 });
@@ -82,7 +61,8 @@ final sessionProvider =
   return FirebaseFirestore.instance
       .doc('sessions/$configId')
       .snapshots()
-      .map((snap) => snap.exists ? Session.fromJson(snap.data()!) : null);
+      .map((snap) =>
+          snap.exists ? Session.fromJson(_convertTimestamps(snap.data()!)) : null);
 });
 
 // ---------------------------------------------------------------------------
@@ -90,16 +70,18 @@ final sessionProvider =
 // ---------------------------------------------------------------------------
 
 final pingoConfigsProvider =
-    StateNotifierProvider<PingoPairingsNotifier, List<PingoPairing>>((ref) {
-  final prefs = ref.watch(_prefsProvider).valueOrNull;
-  return PingoPairingsNotifier(prefs);
-});
+    NotifierProvider<PingoPairingsNotifier, List<PingoPairing>>(PingoPairingsNotifier.new);
 
-class PingoPairingsNotifier extends StateNotifier<List<PingoPairing>> {
-  PingoPairingsNotifier(this._prefs) : super(_loadFromPrefs(_prefs));
-
-  final SharedPreferences? _prefs;
+class PingoPairingsNotifier extends Notifier<List<PingoPairing>> {
   static const _key = 'pingo_pairings';
+
+  SharedPreferences? get _prefs => ref.read(_prefsProvider).value;
+
+  @override
+  List<PingoPairing> build() {
+    final prefs = ref.watch(_prefsProvider).value;
+    return _loadFromPrefs(prefs);
+  }
 
   static List<PingoPairing> _loadFromPrefs(SharedPreferences? prefs) {
     final raw = prefs?.getStringList(_key) ?? [];
@@ -125,4 +107,13 @@ class PingoPairingsNotifier extends StateNotifier<List<PingoPairing>> {
     final raw = list.map((p) => jsonEncode(p.toJson())).toList();
     await _prefs?.setStringList(_key, raw);
   }
+}
+
+// Converts Firestore Timestamps to ISO 8601 strings so json_serializable can parse them.
+Map<String, dynamic> _convertTimestamps(Map<String, dynamic> data) {
+  return data.map((key, value) {
+    if (value is Timestamp) return MapEntry(key, value.toDate().toIso8601String());
+    if (value is Map<String, dynamic>) return MapEntry(key, _convertTimestamps(value));
+    return MapEntry(key, value);
+  });
 }
