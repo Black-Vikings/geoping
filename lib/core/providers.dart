@@ -16,7 +16,7 @@ import 'models/user_role.dart';
 // ---------------------------------------------------------------------------
 
 final authProvider = StreamProvider<User?>(
-    (ref) => FirebaseAuth.instance.authStateChanges());
+    (ref) => FirebaseAuth.instance.userChanges());
 
 final _prefsProvider = FutureProvider<SharedPreferences>(
     (_) => SharedPreferences.getInstance());
