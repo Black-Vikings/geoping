@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'app_prefs.dart';
+
 import '../features/familiar/screens/familiar_config_form_screen.dart';
 import '../features/familiar/screens/familiar_home_screen.dart';
 import '../features/familiar/screens/familiar_live_map_screen.dart';
@@ -16,6 +18,9 @@ String _initialLocation() {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return '/';
   if (user.isAnonymous) return '/pingo';
+  // Non-anonymous user: use persisted role to distinguish Pingo (linked Google) from Familiar
+  final savedRole = appPrefs?.getString('user_role');
+  if (savedRole == 'pingo') return '/pingo';
   return '/familiar';
 }
 

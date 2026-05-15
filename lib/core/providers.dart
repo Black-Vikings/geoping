@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_prefs.dart';
 import 'models/config.dart';
 import 'models/pingo_pairing.dart';
 import 'models/session.dart';
@@ -27,10 +28,23 @@ final _prefsProvider = FutureProvider<SharedPreferences>(
 final roleProvider = NotifierProvider<RoleNotifier, UserRole?>(RoleNotifier.new);
 
 class RoleNotifier extends Notifier<UserRole?> {
-  @override
-  UserRole? build() => null;
+  static const _key = 'user_role';
 
-  void setRole(UserRole role) => state = role;
+  @override
+  UserRole? build() {
+    final saved = appPrefs?.getString(_key);
+    return saved != null ? UserRole.values.byName(saved) : null;
+  }
+
+  void setRole(UserRole role) {
+    appPrefs?.setString(_key, role.name);
+    state = role;
+  }
+
+  void clearRole() {
+    appPrefs?.remove(_key);
+    state = null;
+  }
 }
 
 // ---------------------------------------------------------------------------

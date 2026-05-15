@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/models/user_role.dart';
 import '../../../core/providers.dart';
 import '../../../core/strings.dart';
 import '../../../core/theme.dart';
@@ -31,7 +32,7 @@ class PingoSettingsScreen extends ConsumerWidget {
               ? _LinkGoogleCard(onLink: () => _linkGoogle(context, ref))
               : _GoogleAccountCard(
                   user: user!,
-                  onSignOut: () => _signOut(context),
+                  onSignOut: () => _signOut(context, ref),
                 ),
           const SizedBox(height: 32),
 
@@ -141,57 +142,41 @@ class PingoSettingsScreen extends ConsumerWidget {
 
   Future<void> _linkGoogle(BuildContext context, WidgetRef ref) async {
     final localPairings = ref.read(pingoConfigsProvider);
+
+    Future<void> onSuccess(String uid) async {
+      await ref
+          .read(pingoConfigsProvider.notifier)
+          .migrateLocalToFirestore(uid, localPairings);
+      ref.read(roleProvider.notifier).setRole(UserRole.pingo);
+      if (context.mounted) context.go('/pingo');
+    }
+
     try {
-      final AuthCredential credential;
       if (kIsWeb) {
         final result = await FirebaseAuth.instance.currentUser!
             .linkWithPopup(GoogleAuthProvider());
-        await ref
-            .read(pingoConfigsProvider.notifier)
-            .migrateLocalToFirestore(result.user!.uid, localPairings);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
-          );
-        }
+        await onSuccess(result.user!.uid);
         return;
       }
 
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) return;
       final googleAuth = await googleUser.authentication;
-      credential = GoogleAuthProvider.credential(
+      final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
       final cred = await FirebaseAuth.instance.currentUser!
           .linkWithCredential(credential);
-      await ref
-          .read(pingoConfigsProvider.notifier)
-          .migrateLocalToFirestore(cred.user!.uid, localPairings);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
-        );
-      }
+      await onSuccess(cred.user!.uid);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'credential-already-in-use' && e.credential != null) {
-        // Google account already has a Firebase account — sign into it and migrate
+        // Google account already exists — sign into it and migrate pairings
         try {
-          final cred = await FirebaseAuth.instance
-              .signInWithCredential(e.credential!);
-          await ref
-              .read(pingoConfigsProvider.notifier)
-              .migrateLocalToFirestore(cred.user!.uid, localPairings);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('¡Cuenta vinculada! Tus datos están a salvo.')),
-            );
-          }
+          final cred =
+              await FirebaseAuth.instance.signInWithCredential(e.credential!);
+          await onSuccess(cred.user!.uid);
         } catch (inner) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -209,7 +194,8 @@ class PingoSettingsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _signOut(BuildContext context) async {
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    ref.read(roleProvider.notifier).clearRole();
     await FirebaseAuth.instance.signOut();
     if (context.mounted) context.go('/');
   }
