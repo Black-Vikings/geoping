@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -146,8 +147,15 @@ class PingoSettingsScreen extends ConsumerWidget {
         cred = await FirebaseAuth.instance.currentUser!
             .linkWithPopup(GoogleAuthProvider());
       } else {
+        final googleUser = await GoogleSignIn().signIn();
+        if (googleUser == null) return;
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
         cred = await FirebaseAuth.instance.currentUser!
-            .linkWithProvider(GoogleAuthProvider());
+            .linkWithCredential(credential);
       }
       await ref
           .read(pingoConfigsProvider.notifier)
